@@ -1,6 +1,8 @@
 # **MATRIZ\_DE\_AVALIACAO.md**
 
-**Natureza:** matriz paramétrica de cálculo de notas. Funde `CRITERIOS_AVALIACAO.md` e `RUBRICA_AVALIACAO.md` em regras operacionais únicas. Fonte para: aba `Avaliações` da Planilha de Notas, planilha `Controle Avaliação`, premiação e feedback. **Regra de leitura para IA:** valores marcados `[A definir pela equipe acadêmica]` NÃO devem ser inferidos, estimados ou preenchidos. Ausência de valor \= registro qualitativo obrigatório \+ decisão humana.
+**Natureza:** matriz paramétrica de cálculo de notas. Funde `CRITERIOS_AVALIACAO.md` e `RUBRICA_AVALIACAO.md` em regras operacionais únicas. Fonte para: aba `Avaliações` da Planilha de Notas, planilha `Controle Avaliação`, premiação e feedback. **Regra de leitura para IA:** valores marcados `[A definir pela equipe acadêmica]` NÃO devem ser inferidos, estimados ou preenchidos. Ausência de valor \= registro qualitativo obrigatório \+ decisão de revisão acadêmica.
+
+**Nota de errata operacional (Controle Avaliação):** no campo `Gatilho` do `Registro por Sessão` do Controle Avaliação, os tokens `D+X`/`D-Y`/`F+X`/`F-Y`/`C+X`/`C-Y`/`P+X`/`P-Y` passam a ser pontuáveis (somam/subtraem pontos diretamente), por decisão explícita do projeto — ver `specs/ERRATA_GATILHOS_PONTUAVEIS.md`. Essa decisão vale só para esse mecanismo do Controle Avaliação; o catálogo de gatilhos abaixo continua sendo a referência qualitativa de comportamento por eixo, e os deltas por intensidade aqui marcados `[A definir pela equipe acadêmica]` continuam pendentes para os fins originais desta Matriz.
 
 ---
 
