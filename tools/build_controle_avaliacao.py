@@ -6,14 +6,19 @@ specs/ERRATA_GATILHOS_PONTUAVEIS.md, specs/PLANITA_NOTAS_CONTRATO_TECNICO.md.
 
 Padrão visual reproduzido da Planilha de Notas oficial (input/):
 título preto/branco 20pt, cabeçalhos roxo FF20124D com texto branco,
-listras CCCCCC/branco, falta E6B8AF via formatação condicional,
-bordas finas (preto entre blocos, B7B7B7 internas), Calibri.
+listras CCCCCC/branco linha sim/linha não, falta E6B8AF via formatação
+condicional, bordas finas (preto entre blocos, B7B7B7 internas), Calibri.
+
+Registro por Sessão é ordenado por sessão (todos os delegados da 1ª sessão,
+depois todos da 2ª, etc.), com a coluna de ordenamento em destaque roxo,
+espelhando o padrão da coluna de índice da Planilha de Notas oficial.
 """
 
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Border, Side, Alignment
 from openpyxl.formatting.rule import FormulaRule
 from openpyxl.worksheet.datavalidation import DataValidation
+from openpyxl.workbook.properties import CalcProperties
 from openpyxl.utils import get_column_letter
 
 # ---------------------------------------------------------------- constantes
@@ -22,9 +27,9 @@ N_DELEGADOS = 100          # capacidade, igual à Planilha de Notas oficial
 N_SESSOES = 5
 REG_NAME = "Registro por Sessão"
 
-PREENCH_HDR_ROW = 9        # cabeçalho do cadastro (dados a partir da linha 10)
-REG_DATA_START = 4         # dados do Registro começam na linha 4
-NOTA_DATA_START = 4        # dados da Nota começam na linha 4
+PREENCH_HDR_ROW = 3        # cabeçalho do cadastro (dados a partir da linha 4, sem gap)
+REG_DATA_START = 4         # dados do Registro começam na linha 4 (header na 3)
+NOTA_DATA_START = 4        # dados da Nota começam na linha 4 (header na 3)
 
 ROXO = "FF20124D"
 PRETO = "FF000000"
@@ -126,7 +131,7 @@ def formula_nota_preliminar(letra, base, col_gatilho, row):
 
 
 def simulate_tokens(text, letra):
-    """Réplica em Python do parser da fórmula, para validação."""
+    """Réplica em Python do parser da fórmula, para validação rápida."""
     limpo = text.upper().replace(" ", "").replace(letra, "")
     pad = limpo.replace(";", " " * PAD)
     total = 0
@@ -137,6 +142,15 @@ def simulate_tokens(text, letra):
         except ValueError:
             pass
     return total
+
+
+def reg_row(delegate_i, session_s):
+    """Linha do Registro por Sessão para (delegado i, sessão s).
+
+    Ordenamento por sessão: todas as linhas da 1ª sessão (delegados 1..N)
+    vêm antes das linhas da 2ª sessão, e assim por diante.
+    """
+    return REG_DATA_START + (session_s - 1) * N_DELEGADOS + (delegate_i - 1)
 
 
 # ---------------------------------------------------------------- helpers
@@ -175,17 +189,9 @@ def build_preenchimento(wb):
     ws.title = "Preenchimento"
     ws.sheet_properties.tabColor = ROXO[2:]
 
-    title_block(ws, "D", "Controle Avaliação", "Preenchimento — lista-mãe do comitê")
-
-    instrucoes = [
-        "Preencha um delegado por linha, a partir da linha 10. A ordem desta aba comanda o Registro por Sessão e a aba Nota.",
-        "Delegado e Representação/Função são preenchidos pela equipe. Presença geral é a presença consolidada do evento.",
-        "Não insira nem exclua linhas: as demais abas referenciam estas posições fixas.",
-    ]
-    for i, txt in enumerate(instrucoes):
-        cell = ws.cell(row=4 + i, column=2, value=txt)
-        cell.font = F_TXT_I
-        cell.alignment = AL_L_NW
+    title_block(ws, "D", "Controle Avaliação",
+                "Preenchimento — lista-mãe do comitê. Um delegado por linha, "
+                "sem inserir/excluir linhas: as demais abas referenciam estas posições fixas.")
 
     headers = ["", "Delegado", "Representação/Função", "Presença geral"]
     for j, h in enumerate(headers, start=1):
@@ -199,7 +205,7 @@ def build_preenchimento(wb):
     for i in range(1, N_DELEGADOS + 1):
         r = PREENCH_HDR_ROW + i
         ws.cell(row=r, column=1, value=f'=IF($B{r}="","",ROW()-{PREENCH_HDR_ROW})')
-        fill = stripe_fill(i % 2 == 1)  # linha 10 (1º delegado) cinza, como a oficial
+        fill = stripe_fill(i % 2 == 1)  # 1º delegado cinza, como a oficial
         for j in range(1, 5):
             c = ws.cell(row=r, column=j)
             c.font = F_TXT
@@ -371,8 +377,8 @@ def build_rubrica(wb):
 
 # ---------------------------------------------------------------- Registro por Sessão
 
-# colunas: A nº | B Sessão | C Delegado | D Representação/Função | E Presença |
-# F Status | G-J eixo D | K-N eixo F | O-R eixo C | S-V eixo P | W X síntese
+# colunas: A nº (ordenamento, roxo) | B Sessão | C Delegado | D Representação/Função |
+# E Presença | F Status | G-J eixo D | K-N eixo F | O-R eixo C | S-V eixo P | W X síntese
 COL_EIXO = {"D": ("G", "H", "I", "J"), "F": ("K", "L", "M", "N"),
             "C": ("O", "P", "Q", "R"), "P": ("S", "T", "U", "V")}
 
@@ -419,10 +425,13 @@ def build_registro(wb, triagem_ranges):
     bloco_inicio = {openpyxl.utils.column_index_from_string(COL_EIXO[l][0])
                     for l in COL_EIXO} | {openpyxl.utils.column_index_from_string("W")}
 
-    for i in range(1, N_DELEGADOS + 1):
-        rp = PREENCH_HDR_ROW + i  # linha do delegado no Preenchimento
-        for s in range(1, N_SESSOES + 1):
-            r = REG_DATA_START + (i - 1) * N_SESSOES + (s - 1)
+    # ordenamento por sessão: todas as linhas da 1ª sessão (delegados 1..N),
+    # depois todas as da 2ª sessão, etc. A numeração da coluna A reinicia em
+    # cada sessão (1..N_DELEGADOS).
+    for s in range(1, N_SESSOES + 1):
+        for i in range(1, N_DELEGADOS + 1):
+            r = reg_row(i, s)
+            rp = PREENCH_HDR_ROW + i  # linha do delegado no Preenchimento
             ws.cell(row=r, column=1, value=f'=IF($C{r}="","",{i})')
             ws.cell(row=r, column=2, value=f'=IF($C{r}="","","{s}ª Sessão")')
             ws.cell(row=r, column=3,
@@ -435,7 +444,8 @@ def build_registro(wb, triagem_ranges):
                 ws.cell(row=r, column=nota_col,
                         value=formula_nota_preliminar(letra, base, cols[1], r))
 
-            fill = stripe_fill(i % 2 == 0)  # listra por bloco de delegado
+            # listra simples: uma linha cinza, uma branca, continuamente
+            fill = stripe_fill((r - REG_DATA_START) % 2 == 0)
             for j in range(1, 25):
                 c = ws.cell(row=r, column=j)
                 c.font = F_TXT_B if j in (10, 14, 18, 22) else F_TXT
@@ -446,6 +456,12 @@ def build_registro(wb, triagem_ranges):
                     c.alignment = Alignment(horizontal="center", vertical="center")
                 if fill:
                     c.fill = fill
+
+            # coluna de ordenamento: sempre roxo institucional/texto branco,
+            # sobrepõe a listra (padrão da coluna de índice da planilha oficial)
+            col_a = ws.cell(row=r, column=1)
+            col_a.fill = FILL_HDR
+            col_a.font = F_HDR
 
     # bordas pretas de bloco também nos cabeçalhos
     for row in (2, 3):
@@ -476,7 +492,7 @@ def build_registro(wb, triagem_ranges):
         dv.add(f"{col_triagem}{REG_DATA_START}:{col_triagem}{last_row}")
 
     ws.conditional_formatting.add(
-        f"A{REG_DATA_START}:X{last_row}",
+        f"B{REG_DATA_START}:X{last_row}",
         FormulaRule(formula=[f'$E{REG_DATA_START}="Falta"'], fill=FILL_FALTA))
 
     ws.freeze_panes = f"E{REG_DATA_START}"
@@ -546,7 +562,6 @@ def build_nota(wb):
     for i in range(1, N_DELEGADOS + 1):
         r = NOTA_DATA_START + i - 1
         rp = PREENCH_HDR_ROW + i
-        reg0 = REG_DATA_START + (i - 1) * N_SESSOES  # linha da 1ª sessão no Registro
 
         ws.cell(row=r, column=1, value=f'=IF($B{r}="","",ROW()-{NOTA_DATA_START - 1})')
         ws.cell(row=r, column=2,
@@ -563,28 +578,28 @@ def build_nota(wb):
 
         # J: evidências das 5 sessões (rotuladas por sessão e eixo)
         termos = []
-        for s in range(N_SESSOES):
-            rr = reg0 + s
+        for s in range(1, N_SESSOES + 1):
+            rr = reg_row(i, s)
             for letra in ("D", "F", "C", "P"):
                 ev_col = COL_EIXO[letra][0]
                 ref = f"'{REG_NAME}'!${ev_col}{rr}"
-                termos.append(f'IF({ref}="","","S{s + 1} {letra}: "&{ref}&CHAR(10))')
+                termos.append(f'IF({ref}="","","S{s} {letra}: "&{ref}&CHAR(10))')
         ws.cell(row=r, column=10, value=f'=IF($B{r}="","",{"&".join(termos)})')
 
         # K: sínteses e observações das 5 sessões
         termos = []
-        for s in range(N_SESSOES):
-            rr = reg0 + s
-            termos.append(f'IF(\'{REG_NAME}\'!$W{rr}="","","S{s + 1}: "&\'{REG_NAME}\'!$W{rr}&CHAR(10))')
-            termos.append(f'IF(\'{REG_NAME}\'!$X{rr}="","","S{s + 1} obs: "&\'{REG_NAME}\'!$X{rr}&CHAR(10))')
+        for s in range(1, N_SESSOES + 1):
+            rr = reg_row(i, s)
+            termos.append(f'IF(\'{REG_NAME}\'!$W{rr}="","","S{s}: "&\'{REG_NAME}\'!$W{rr}&CHAR(10))')
+            termos.append(f'IF(\'{REG_NAME}\'!$X{rr}="","","S{s} obs: "&\'{REG_NAME}\'!$X{rr}&CHAR(10))')
         ws.cell(row=r, column=11, value=f'=IF($B{r}="","",{"&".join(termos)})')
 
         # M..AF: área de colagem (só números; falta/vazio vira célula vazia)
         for e, letra in enumerate(("D", "F", "C", "P")):
             reg_col = nota_cols_reg[letra]
-            for s in range(N_SESSOES):
-                col_letter = paste_cols[e * N_SESSOES + s]
-                ref = f"'{REG_NAME}'!${reg_col}{reg0 + s}"
+            for s in range(1, N_SESSOES + 1):
+                col_letter = paste_cols[e * N_SESSOES + (s - 1)]
+                ref = f"'{REG_NAME}'!${reg_col}{reg_row(i, s)}"
                 ws.cell(row=r, column=openpyxl.utils.column_index_from_string(col_letter),
                         value=f'=IF(ISNUMBER({ref}),{ref},"")')
 
@@ -627,7 +642,9 @@ def build_nota(wb):
 # ---------------------------------------------------------------- main
 
 def main():
-    # autoteste do parser de tokens antes de gerar
+    # autoteste do parser de tokens antes de gerar (checagem rápida em Python;
+    # a checagem definitiva roda no arquivo real via
+    # tools/validate_controle_avaliacao.py, que abre o .xlsx no Excel)
     casos = [("C+2", "C", 2), ("C+2; C-1", "C", 1), ("c+2;c-1", "C", 1),
              ("F+2; F-1", "F", 1), ("D+1; D-2", "D", -1), ("P-2", "P", -2),
              ("", "C", 0), ("obs", "C", 0), ("C+2, C-1", "C", 0),
@@ -635,9 +652,10 @@ def main():
     for texto, letra, esperado in casos:
         obtido = simulate_tokens(texto, letra)
         assert obtido == esperado, f"parser: {texto!r} ({letra}) -> {obtido}, esperado {esperado}"
-    print(f"Parser de tokens validado em {len(casos)} casos.")
+    print(f"Parser de tokens validado (simulação Python) em {len(casos)} casos.")
 
     wb = openpyxl.Workbook()
+    wb.calculation = CalcProperties(fullCalcOnLoad=True)
     build_preenchimento(wb)
     _, triagem_ranges = build_rubrica(wb)
     build_registro(wb, triagem_ranges)
